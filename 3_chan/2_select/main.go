@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"time"
@@ -9,17 +11,35 @@ import (
 // add timeout to avoid long waiting
 func main() {
 	rand.Seed(time.Now().Unix())
+	ctx := context.Background()
+	ctx, _ = context.WithTimeout(ctx, time.Second*2)
+	chanForResp := make(chan resp)
+	go RPCCall(ctx, chanForResp)
+	var response resp
+	response = <-chanForResp
 
-	chanForResp := make(chan int)
-	go RPCCall(chanForResp)
-
-	result := <-chanForResp
-	fmt.Println(result)
+	fmt.Println(response.res, response.err)
+	// cancel()
 }
 
-func RPCCall(ch chan<- int) {
-	// sleep 0-4 sec
-	time.Sleep(time.Second * time.Duration(rand.Intn(5)))
+type resp struct {
+	res int
+	err error
+}
 
-	ch <- rand.Int()
+func RPCCall(ctx context.Context, ch chan<- resp) {
+	select {
+	case <-ctx.Done():
+		ch <- resp{
+			res: 0,
+			err: errors.New("timeout expired"),
+		}
+	case <-time.After(time.Second * time.Duration(rand.Intn(5))):
+		// sleep 0-4 sec
+		ch <- resp{
+			res: rand.Int(),
+		}
+
+	}
+
 }

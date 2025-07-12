@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sync"
 )
 
 // merge two channels
@@ -24,22 +25,46 @@ func main() {
 }
 
 func merge[T any](chans ...chan T) chan T {
-	return nil
-}
-
-func syncMerge[T any](chans ...chan T) chan T {
-	l := 0
-	for _, singleCh := range chans {
-		l += len(singleCh) // 3
-	}
-
-	result := make(chan T, l)
-	for _, singleCh := range chans {
-		for val := range singleCh {
-			result <- val
+	returnCh := make(chan T)
+	go func() {
+		var wg sync.WaitGroup
+		for _, ch := range chans {
+			wg.Add(1)
+			go func(c chan T) {
+				defer wg.Done()
+				for val := range c {
+					returnCh <- val
+				}
+			}(ch)
 		}
-	}
-	close(result)
 
-	return result
+		go func() {
+			wg.Wait()
+			close(returnCh)
+		}()
+	}()
+
+	return returnCh
 }
+
+//TODO можно сделать mergeCh через воркер пул
+// go func() {
+// 		for _, url := range urls {
+// 			ch <- url
+// 		}
+// 		close(ch)
+// 	}()
+// 	numGorutins := 30
+// 	wg.Add(numGorutins)
+// 	for range numGorutins {
+// 		go func() {
+// 			defer wg.Done()
+
+// 			for u := range ch {
+// 				code := sendRequest(u)
+// 				locker.Lock()
+// 				codes[code]++
+// 				locker.Unlock()
+// 			}
+// 		}()
+// 	}
